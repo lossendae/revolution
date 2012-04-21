@@ -1709,6 +1709,12 @@ class modX extends xPDO {
             $chunk->setPolicies($this->sourceCache['modChunk'][$chunkName]['policies']);
         } else {
             $chunk= $this->getObject('modChunk', array ('name' => $chunkName), true);
+            /* Try to get a filebased chunk if we are in a modChunk tag and the tag name end with .tpl (otf == on the fly) */
+            if (empty($chunk)){
+                if(strlen($chunkName) > 5 && substr($chunkName, -4) == '.tpl') {
+                    $chunk = $this->getChunkFromTemplate($chunkName, $properties);
+                }
+            }
             if (!empty($chunk) || $chunk === '0') {
                 $this->sourceCache['modChunk'][$chunkName]= array (
                     'fields' => $chunk->toArray(),
@@ -1721,6 +1727,122 @@ class modX extends xPDO {
             $output= $chunk->process($properties);
         }
         return $output;
+    }    
+    
+    /**
+    * getChunkFromTemplate.
+    *
+    * Get a filebased chunk that is not in database and related to the current template
+    *
+    * @access public
+    * @param $name string the tpl filename with.
+    * @param $properties array an array of properties for overriding path informations.
+    * @return $value {object||boolean} The newly created chunk Object - false if not founded.
+    */
+    public function getChunkFromTemplate($name, $properties = array()){        
+        $chunk = null;
+        $config = array();
+        $defaultConfig = array();
+        $templateProperties = is_array($this->resource->getOne('Template')->get('properties')) ? $this->resource->getOne('Template')->get('properties') : array();
+        $templateName = $this->resource->getOne('Template')->get('templatename');
+        
+        /* Setting the default path to templates */
+        if(array_key_exists('file_path', $templateProperties)){            
+            // Override exist, little sanitization and use it
+            $defaultConfig['file_path'] = strtolower(str_replace(' ','_', $templateProperties['file_path']['value']));
+        } else {
+            // No override exist in template properties
+            $defaultConfig['file_path'] = $this->getOption('core_path') . 'files/' . strtolower(str_replace(' ','_', $templateName));            
+        }
+        /* Add trailing slash if ommited */
+        if(substr($defaultConfig['file_path'], -1) !== '/'){
+            $defaultConfig['file_path'] .= '/'; 
+        }              
+        
+        /* Setting the chunk directory */
+        if(array_key_exists('chunks_dir', $templateProperties)){
+            $defaultConfig['chunks_dir'] = strtolower(str_replace(' ','_', $templateProperties['chunks_dir']['value']));            
+        } else {
+            $defaultConfig['chunks_dir'] = $this->getOption('default_otf_chunks_dir', null, 'elements/chunks');
+        }
+        /* Add trailing slash if ommited */
+        if(substr($defaultConfig['chunks_dir'], -1) !== '/'){
+            $defaultConfig['chunks_dir'] .= '/'; 
+        }
+        
+        /* Set chunk extension */
+        if(array_key_exists('chunk_ext', $templateProperties)){
+            $defaultConfig['chunk_ext'] = $templateProperties['chunk_ext']['value'];   
+        }
+                
+        /* If properties are passed along, override again - useful for 3rd party component using $modx->getChunk() */
+        $config = array_merge($defaultConfig, $properties);
+       
+        /* Allow user to specify its own extension for tpls */
+        $chunkExtension = $this->getOption('chunk_ext', $config, '.tpl');
+        $name = strtolower(str_replace('.tpl', $chunkExtension, $name));
+
+        /* Get tpl file if it exist */
+        $tplPath = $this->convertPath($config['file_path']) . $config['chunks_dir'];
+        $chunk = $this->_getStaticChunk($tplPath, $name);
+        if(!empty($chunk)) return $chunk;
+        
+        $this->log(modX::LOG_LEVEL_ERROR, '`' . $name . '` not found in : "'. $tplPath .'"');
+        
+        $useFallBack = $this->getOption('otf_use_fallback', $config, true);
+        if($useFallBack){
+            /* Fall back path */
+            $config['file_path'] = $this->getOption('default_otf_files_path', null , $this->getOption('core_path').'files/default/');
+            $tplPath = $this->convertPath($config['file_path']) . $config['chunks_dir'] .'/';      
+            $chunk = $this->_getStaticChunk($tplPath, $name);
+            if(!empty($chunk)) return $chunk;
+        }
+        $this->log(modX::LOG_LEVEL_ERROR, '`' . $name . '` not found in : "'. $tplPath .'"');
+        return $chunk;
+    }
+    
+    /**
+     * _getStaticChunk.
+     *
+     * get a static chunk from specified directory
+     *
+     * @access protected
+     * @param $tplPath string The path to the chunk to retreive
+     * @param $name string The name of the chunk to retreive
+     * @return $value mixed The chuhk object or null if the file does not exist
+     */
+    protected function _getStaticChunk($tplPath, $name){
+        $file = $tplPath . $name;
+        if (file_exists($file)) {
+            $o = file_get_contents($file);
+            $chunk = $this->newObject('modChunk');
+            $chunk->set('name', $name);
+            $chunk->setContent($o);            
+            return $chunk;
+        }
+        return null;
+    }
+
+    /**
+     * convertPath.
+     *
+     * Convert string params to path
+     *
+     * @access private
+     * @param $value string the string to convert.
+     * @return $value string The converted string.
+     */
+    public function convertPath($value){    
+        $value = str_replace(array(
+            '{assets_path}',
+            '{base_path}',
+            '{core_path}',            
+        ),array(
+            $this->getOption('assets_path'),
+            $this->getOption('base_path'),
+            $this->getOption('core_path'),            
+        ),$value);
+        return $value;
     }
 
     /**
