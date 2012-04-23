@@ -1766,7 +1766,8 @@ class modX extends xPDO {
             $defaultConfig['file_path'] = strtolower(str_replace(' ','_', $templateProperties['file_path']['value']));
         } else {
             // No override exist in template properties
-            $defaultConfig['file_path'] = $this->getOption('core_path') . 'templates/' . strtolower(str_replace(' ','_', $templateName));            
+            $defaultTplPath = $this->getOption('filebased_tpl_path', null, $this->getOption('core_path') . 'templates/');
+            $defaultConfig['file_path'] = $defaultTplPath . strtolower(str_replace(' ','_', $templateName));            
         }
         
         /* Add trailing slash if ommited */
@@ -1775,15 +1776,15 @@ class modX extends xPDO {
         }              
         
         /* Set chunk extension */
-        if(array_key_exists('chunk_ext', $templateProperties)){
-            $defaultConfig['chunk_ext'] = $templateProperties['chunk_ext']['value'];   
+        if(array_key_exists('tpl_suffix', $templateProperties)){
+            $defaultConfig['tpl_suffix'] = $templateProperties['tpl_suffix']['value'];   
         }
                 
         /* If properties are passed along, override again - useful for 3rd party component using $modx->getChunk() */
         $config = array_merge($defaultConfig, $properties);
        
         /* Allow user to specify its own extension for tpls */
-        $chunkExtension = $this->getOption('chunk_ext', $config, '.tpl');
+        $chunkExtension = $this->getOption('tpl_suffix', $config, '.tpl');
         $currentName = strtolower(str_replace('.tpl', $chunkExtension, $name));
 
         /* Get tpl file if it exist */
@@ -1796,7 +1797,7 @@ class modX extends xPDO {
         $useFallBack = $this->getOption('filebased_use_fallback', $config, true);
         if($useFallBack){
             /* Fall back path */
-            $config['file_path'] = $this->getOption('filebased_default_files_path', null , $this->getOption('core_path').'templates/common/');
+            $config['file_path'] = $this->getOption('filebased_default_files_path', null , $defaultTplPath .'common/');
             $tplPath = $this->convertPath($config['file_path']);      
             $chunk = $this->_getStaticFile($tplPath, $name);
             if(!empty($chunk)) return $chunk;
