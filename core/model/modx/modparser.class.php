@@ -531,9 +531,16 @@ class modParser {
             }
         }
         /* Try to get a filebased chunk if we are in a modChunk tag and the tag name end with .tpl */
-        if (!$element instanceof modElement && $class == 'modChunk'){      
-            if(strlen($name) > 5 && substr($name, -4) == '.tpl') {  
-                $element = $this->modx->getChunkFromTemplate($name);
+        if (!$element instanceof modElement){
+            if($class == 'modChunk'){      
+                if($this->modx->hasFileExtension($name)){
+                    $element = $this->modx->getChunkFromFile($name);
+                }
+            }
+            if($class == 'modSnippet'){
+                if($this->modx->hasFileExtension($name, 'snippet')){
+                    $element = $this->modx->getSnippetFromFile($name);
+                }
             }
         }
         if ($element instanceof modElement) {
