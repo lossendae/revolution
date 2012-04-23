@@ -1679,11 +1679,6 @@ class modX extends xPDO {
             $snippet->setPolicies($this->sourceCache['modSnippet'][$snippetName]['policies']);
         } else {
             $snippet= $this->getObject('modSnippet', array ('name' => $snippetName), true);
-            if (empty($snippet)){
-                if($this->hasFileExtension($snippetName, 'snippet')){
-                    $snippet = $this->getSnippetFromFile($snippetName, $properties);
-                }
-            }
             if (!empty($snippet)) {
                 $this->sourceCache['modSnippet'][$snippetName] = array (
                     'fields' => $snippet->toArray(),
@@ -1737,16 +1732,13 @@ class modX extends xPDO {
     /**
      * hasFileExtension.
      *
-     * Check whether the given name contains a file extension
-     *
+     * Check whether the given name contains "*.tpl"  at the end
      * @access public
      * @param $name string The filename.
-     * @param $type string The type of file extension to check for (chunk||snippet)
      * @return $value {boolean} Return true if the name contain the requested extension
      */
-    public function hasFileExtension($name, $type = 'chunk'){
-        $extension = ($type == 'chunk') ? '.tpl' : '.php'; 
-        if(strlen($name) > 5 && substr($name, -4) == $extension) {
+    public function hasFileExtension($name){
+        if(strlen($name) > 5 && substr($name, -4) == '.tpl') {
             return true;
         }
         return false;
@@ -1825,69 +1817,6 @@ class modX extends xPDO {
     }
     
     /**
-     * getSnippetFromFile.
-     *
-     * Get a filebased snippet that is not in database and related to the current template
-     *
-     * @access public
-     * @param $name string the filename.
-     * @param $properties array an array of properties for overriding path informations.
-     * @return $value {object||boolean} The newly created snippet Object - false if not founded.
-     */
-    public function getSnippetFromFile($name, $properties = array()){        
-        $snippet = null;
-        $config = array();
-        $defaultConfig = array();
-        $templateProperties = is_array($this->resource->getOne('Template')->get('properties')) ? $this->resource->getOne('Template')->get('properties') : array();
-        $templateName = $this->resource->getOne('Template')->get('templatename');
-        
-        /* Setting the default path to templates */
-        if(array_key_exists('file_path', $templateProperties)){            
-            // Override exist, little sanitization and use it
-            $defaultConfig['file_path'] = strtolower(str_replace(' ','_', $templateProperties['file_path']['value']));
-        } else {
-            // No override exist in template properties
-            $defaultConfig['file_path'] = $this->getOption('core_path') . 'files/' . strtolower(str_replace(' ','_', $templateName));            
-        }
-        /* Add trailing slash if ommited */
-        if(substr($defaultConfig['file_path'], -1) !== '/'){
-            $defaultConfig['file_path'] .= '/'; 
-        }              
-        
-        /* Setting the snippets directory */
-        if(array_key_exists('snippets_dir', $templateProperties)){
-            $defaultConfig['snippets_dir'] = strtolower(str_replace(' ','_', $templateProperties['snippets_dir']['value']));            
-        } else {
-            $defaultConfig['snippets_dir'] = $this->getOption('default_otf_snippets_dir', null, 'elements/snippets'); // otf == On the fly (?)
-        }
-        /* Add trailing slash if ommited */
-        if(substr($defaultConfig['snippets_dir'], -1) !== '/'){
-            $defaultConfig['snippets_dir'] .= '/'; 
-        }
-                
-        /* If properties are passed along, override again - useful for 3rd party component using $modx->getChunk() */
-        $config = array_merge($defaultConfig, $properties);
-
-        /* Get tpl file if it exist */
-        $tplPath = $this->convertPath($config['file_path']) . $config['snippets_dir'];
-        $snippet = $this->_getStaticFile($tplPath, $name, 'snippet');
-        if(!empty($snippet)) return $snippet;
-        
-        $this->log(modX::LOG_LEVEL_ERROR, '`' . $name . '` not found in : "'. $tplPath .'"');
-        
-        $useFallBack = $this->getOption('otf_use_fallback', $config, true);
-        if($useFallBack){
-            /* Fall back path */
-            $config['file_path'] = $this->getOption('default_otf_files_path', null , $this->getOption('core_path').'files/default/');
-            $tplPath = $this->convertPath($config['file_path']) . $config['snippets_dir'];      
-            $snippet = $this->_getStaticFile($tplPath, $name, 'snippet');
-            if(!empty($snippet)) return $snippet;
-        }
-        $this->log(modX::LOG_LEVEL_ERROR, '`' . $name . '` not found in : "'. $tplPath .'"');
-        return $snippet;
-    }
-    
-    /**
      * _getStaticFile.
      *
      * get a static file from specified directory
@@ -1895,24 +1824,16 @@ class modX extends xPDO {
      * @access protected
      * @param $tplPath string The path to the file to retreive
      * @param $name string The name of the file to retreive
-     * @param $type string The type of file extension to check for (chunk||snippet)
      * @return $value mixed The chuhk object or null if the file does not exist
      */
-    protected function _getStaticFile($tplPath, $name, $type = 'chunk'){
+    protected function _getStaticFile($tplPath, $name){
         $file = $tplPath . $name;           
         if (file_exists($file)) {        
             $o = file_get_contents($file);
-            if($type == 'chunk'){
-                $chunk = $this->newObject('modChunk');
-                $chunk->set('name', $name);
-                $chunk->setContent($o); 
-                return $chunk;               
-            } else {
-                $snippet = $this->newObject('modSnippet');
-                $snippet->set('name', $name);
-                $snippet->setContent($o); 
-                return $snippet;
-            }
+            $chunk = $this->newObject('modChunk');
+            $chunk->set('name', $name);
+            $chunk->setContent($o); 
+            return $chunk;               
         }
         return null;
     }
